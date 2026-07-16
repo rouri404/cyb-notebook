@@ -11,6 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 import routes from './routes';
+import { initDb } from './db';
 
 // Basic health check endpoint
 app.get('/health', (req: Request, res: Response) => {
@@ -19,6 +20,8 @@ app.get('/health', (req: Request, res: Response) => {
 
 app.use('/api', routes);
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+initDb().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
 });

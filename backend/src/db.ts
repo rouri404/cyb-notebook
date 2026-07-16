@@ -1,33 +1,49 @@
-import { CosmosClient } from '@azure/cosmos';
-import dotenv from 'dotenv';
+import mysql from 'mysql2/promise';
 
-dotenv.config();
+export const pool = mysql.createPool({
+  host: process.env.MYSQL_HOST || 'localhost',
+  port: parseInt(process.env.MYSQL_PORT || '3306', 10),
+  user: process.env.MYSQL_USER || 'root',
+  password: process.env.MYSQL_PASSWORD || 'root',
+  database: process.env.MYSQL_DATABASE || 'notebook_db',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
 
-const endpoint = process.env.COSMOS_ENDPOINT || "https://localhost:8081";
-const key = process.env.COSMOS_KEY || "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==";
+export async function initDb() {
+  const connection = await pool.getConnection();
+  try {
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS notebooks (
+        id VARCHAR(255) PRIMARY KEY,
+        data JSON NOT NULL
+      )
+    `);
 
-export const MOCK_MODE = process.env.USE_MOCK_DB !== 'false';
-
-const client = new CosmosClient({ endpoint, key });
-const databaseId = process.env.COSMOS_DATABASE || "CadernoDB";
-const containerId = process.env.COSMOS_CONTAINER || "Notebooks";
-
-export async function getContainer() {
-  const { database } = await client.databases.createIfNotExists({ id: databaseId });
-  const { container } = await database.containers.createIfNotExists({ id: containerId });
-  return container;
-}
-
-export const mockDatabase: Record<string, any> = {
-  "notebook-default": {
-    id: "notebook-default",
-    name: "Página 1",
-    updatedAt: new Date().toISOString(),
-    style: {
-      paperType: "lined", // lined, grid, dotted, blank
-      textColor: "#1a1a1a",
-      font: "handwriting-caveat"
-    },
-    items: []
+    // Inicia com um caderno padrão caso o banco esteja vazio
+    const [rows]: any = await connection.query('SELECT COUNT(*) as count FROM notebooks');
+    if (rows[0].count === 0) {
+      const defaultNotebook = {
+        id: "notebook-default",
+        name: "Página 1",
+        updatedAt: new Date().toISOString(),
+        style: {
+          paperType: "lined",
+          textColor: "#1a1a1a",
+          font: "handwriting-caveat"
+        },
+        items: []
+      };
+      await connection.query(
+        'INSERT INTO notebooks (id, data) VALUES (?, ?)',
+        ["notebook-default", JSON.stringify(defaultNotebook)]
+      );
+    }
+    console.log("MySQL Database initialized!");
+  } catch (error) {
+    console.error("Error initializing database:", error);
+  } finally {
+    connection.release();
   }
-};
+}
